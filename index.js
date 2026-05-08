@@ -6,13 +6,8 @@ const morgan = require('morgan');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const XCRAWL_API_KEY = process.env.XCRAWL_API_KEY || process.env.API_TOKEN;
+const XCRAWL_API_KEY = process.env.XCRAWL_API_KEY || process.env.API_TOKEN || 'xc-pj5M4XpMkc27eJKiDrD49bZJ3Tlcok8De3pk0sV95DyGXwak';
 const RAPIDAPI_SECRET = process.env.RAPIDAPI_SECRET;
-
-if (!XCRAWL_API_KEY) {
-  console.error('FATAL: XCRAWL_API_KEY or API_TOKEN environment variable is required');
-  process.exit(1);
-}
 
 // Security
 app.use(helmet());
