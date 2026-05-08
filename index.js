@@ -61,12 +61,12 @@ app.use(auth);
 
 // --- XCrawl API helper ---
 async function callXcrawl(endpoint, body) {
-  const url = `https://api.xcrawl.com${endpoint}`;
+  const url = `https://run.xcrawl.com/v1${endpoint}`;
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': XCRAWL_API_KEY,
+      'Authorization': `Bearer ${XCRAWL_API_KEY}`,
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(60000),
@@ -86,27 +86,29 @@ app.get('/', (req, res) => {
     service: 'XCrawl API Server',
     version: '1.0.0',
     endpoints: [
-      'GET  /search?q=...&limit=10',
-      'POST /scrape        { url, render }',
-      'POST /batch-scrape  { urls, render }',
-      'GET  /screenshot?url=...',
-      'POST /search-and-scrape { query, limit, render }',
+      'POST /search     { query, location, language, limit }',
+      'POST /scrape     { url, mode, proxy, output }',
+      'POST /batch-scrape { urls }',
+      'POST /search-and-scrape { query, limit }',
     ],
     docs: 'https://rapidapi.com/.../xcrawl-api',
   });
 });
 
 /**
- * GET /search?q=search+query&limit=10
+ * POST /search
  * Web search via XCrawl
+ * Body: { query, location, language, limit }
  */
-app.get('/search', async (req, res) => {
+app.post('/search', async (req, res) => {
   try {
-    const { q, limit = 10 } = req.query;
-    if (!q) return res.status(400).json({ error: 'Missing query parameter "q"' });
+    const { query, location, language, limit = 10 } = req.body;
+    if (!query) return res.status(400).json({ error: 'Missing "query" in body' });
     
     const result = await callXcrawl('/search', {
-      query: q,
+      query,
+      location: location || 'US',
+      language: language || 'en',
       limit: Math.min(parseInt(limit) || 10, 50),
     });
     
@@ -122,13 +124,15 @@ app.get('/search', async (req, res) => {
  */
 app.post('/scrape', async (req, res) => {
   try {
-    const { url, render } = req.body;
+    const { url, mode, proxy, output } = req.body;
     if (!url) return res.status(400).json({ error: 'Missing "url" in body' });
     
-    const result = await callXcrawl('/scrape', {
-      url,
-      render: render || false,
-    });
+    const body = { url };
+    if (mode) body.mode = mode;
+    if (proxy) body.proxy = proxy;
+    if (output) body.output = output;
+    
+    const result = await callXcrawl('/scrape', body);
     
     res.json(result);
   } catch (err) {
@@ -142,7 +146,7 @@ app.post('/scrape', async (req, res) => {
  */
 app.post('/batch-scrape', async (req, res) => {
   try {
-    const { urls, render } = req.body;
+    const { urls } = req.body;
     if (!urls || !Array.isArray(urls) || urls.length === 0) {
       return res.status(400).json({ error: 'Missing "urls" array in body' });
     }
@@ -151,7 +155,7 @@ app.post('/batch-scrape', async (req, res) => {
     }
     
     const results = await Promise.all(
-      urls.map(url => callXcrawl('/scrape', { url, render: render || false }))
+      urls.map(url => callXcrawl('/scrape', { url }))
     );
     
     res.json({ results });
@@ -161,15 +165,16 @@ app.post('/batch-scrape', async (req, res) => {
 });
 
 /**
- * GET /screenshot?url=...
+ * POST /screenshot
  * Take a page screenshot
+ * Body: { url }
  */
-app.get('/screenshot', async (req, res) => {
+app.post('/screenshot', async (req, res) => {
   try {
-    const { url } = req.query;
-    if (!url) return res.status(400).json({ error: 'Missing "url" query parameter' });
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: 'Missing "url" in body' });
     
-    const result = await callXcrawl('/screenshot', { url });
+    const result = await callXcrawl('/scrape', { url, output: { screenshot: true } });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -183,15 +188,30 @@ app.get('/screenshot', async (req, res) => {
  */
 app.post('/search-and-scrape', async (req, res) => {
   try {
-    const { query, limit = 10, render } = req.body;
+    const { query, limit = 10, location, language } = req.body;
     if (!query) return res.status(400).json({ error: 'Missing "query" in body' });
     
-    const result = await callXcrawl('/search', {
+    const searchResult = await callXcrawl('/search', {
       query,
+      location: location || 'US',
+      language: language || 'en',
       limit: Math.min(parseInt(limit) || 10, 50),
     });
     
-    res.json(result);
+    // Also scrape each result URL
+    const urls = (searchResult?.data?.data || []).map(r => r.url).filter(Boolean);
+    const scrapes = urls.length > 0 ? await Promise.allSettled(
+      urls.map(url => callXcrawl('/scrape', { url }))
+    ) : [];
+    
+    res.json({
+      search: searchResult,
+      scrapes: scrapes.map((r, i) => ({
+        url: urls[i],
+        status: r.status,
+        data: r.status === 'fulfilled' ? r.value : { error: r.reason?.message },
+      })),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
