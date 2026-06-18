@@ -57,6 +57,23 @@ function auth(req, res, next) {
   next();
 }
 
+// Skip auth for root health check
+app.get('/', (req, res) => {
+  res.json({
+    service: 'XCrawl API Server',
+    version: '1.0.0',
+    endpoints: [
+      'POST /search     { query, location, language, limit }',
+      'POST /scrape     { url, mode, proxy, output }',
+      'POST /batch-scrape { urls }',
+      'POST /screenshot { url }',
+      'POST /search-and-scrape { query, limit }',
+    ],
+    docs: 'https://rapidapi.com/.../xcrawl-api',
+  });
+});
+
+// Auth for all other endpoints
 app.use(auth);
 
 // --- XCrawl API helper ---
