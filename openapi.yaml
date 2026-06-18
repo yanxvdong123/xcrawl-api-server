@@ -1,0 +1,260 @@
+openapi: 3.0.3
+info:
+  title: XCrawl Scraper API
+  description: Web scraping API powered by the XCrawl proxy network. Scrape any URL with rotating residential proxies. Supports web search, single page scrape, batch scraping, and screenshots.
+  version: 1.0.0
+servers:
+  - url: https://xcrawl-api-server-production.up.railway.app
+paths:
+  /search:
+    post:
+      summary: Search the web
+      description: Search the web using Google with XCrawl rotating proxies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: Search query
+                location:
+                  type: string
+                  default: US
+                  description: Search location (country code)
+                language:
+                  type: string
+                  default: en
+                  description: Search language
+                limit:
+                  type: integer
+                  default: 10
+                  minimum: 1
+                  maximum: 50
+                  description: Maximum number of results
+      responses:
+        '200':
+          description: Search results from XCrawl
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request parameters
+        '500':
+          description: Server error
+  /scrape:
+    post:
+      summary: Scrape a URL
+      description: Fetch content of any webpage through the XCrawl proxy network
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: The URL to scrape
+                mode:
+                  type: string
+                  enum: [html, text, json]
+                  description: Output mode
+                proxy:
+                  type: string
+                  description: Proxy configuration
+                output:
+                  type: object
+                  description: Additional output options (e.g. {screenshot: true})
+      responses:
+        '200':
+          description: Successfully scraped the URL
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid URL parameter
+        '500':
+          description: Server error
+  /batch-scrape:
+    post:
+      summary: Batch scrape multiple URLs
+      description: Scrape up to 50 URLs in a single batch request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - urls
+              properties:
+                urls:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+                  minItems: 1
+                  maxItems: 50
+                  description: Array of URLs to scrape
+      responses:
+        '200':
+          description: Batch scrape results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    description: Scraping results for each URL
+        '400':
+          description: Invalid request (too many URLs or empty array)
+        '500':
+          description: Server error
+  /screenshot:
+    post:
+      summary: Take a screenshot
+      description: Capture a screenshot of any webpage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: The URL to screenshot
+      responses:
+        '200':
+          description: Screenshot captured
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid URL
+        '500':
+          description: Server error
+  /search-and-scrape:
+    post:
+      summary: Search and scrape
+      description: Perform a web search then automatically scrape all result pages
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: Search query
+                limit:
+                  type: integer
+                  default: 10
+                  minimum: 1
+                  maximum: 50
+                  description: Maximum number of results to scrape
+                location:
+                  type: string
+                  default: US
+                  description: Search location
+                language:
+                  type: string
+                  default: en
+                  description: Search language
+      responses:
+        '200':
+          description: Combined search and scrape results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  search:
+                    type: object
+                    description: Original search results
+                  scrapes:
+                    type: array
+                    description: Scraped content for each search result
+        '400':
+          description: Invalid request
+        '500':
+          description: Server error
+  /extract:
+    post:
+      summary: Extract structured data
+      description: Extract specific data from a URL using CSS selectors
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+                - selectors
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: The URL to extract data from
+                selectors:
+                  type: object
+                  description: CSS selector -> field name mappings
+                  additionalProperties:
+                    type: string
+                timeout:
+                  type: integer
+                  default: 15000
+      responses:
+        '200':
+          description: Extracted data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    description: Extracted fields
+        '400':
+          description: Invalid request
+        '500':
+          description: Server error
+  /health:
+    get:
+      summary: Health check
+      description: Check if the API server is running
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  uptime:
+                    type: number
